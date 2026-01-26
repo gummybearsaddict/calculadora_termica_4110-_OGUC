@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import io
 import math
+import re
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN Y CARGA DE DATOS ROBUSTA
@@ -13,39 +14,75 @@ st.set_page_config(page_title="Calculadora Térmica OGUC & DITEC", layout="wide"
 URL_GITHUB_RAW = "https://raw.githubusercontent.com/gummybearsaddict/calculadora_termica_4110-_OGUC/main/base_datos_materiales_chile.csv"
 NOMBRE_ARCHIVO_LOCAL = "base_datos_materiales_chile.csv"
 
+def procesar_dato_numerico(valor, es_espesor=False):
+    """
+    Extrae el primer valor numérico válido de una cadena de texto.
+    Maneja formatos como: "140", "50 a 100", "Variable", "0.043 (Aislante)".
+    Si es espesor (es_espesor=True), asume que viene en mm y convierte a metros.
+    """
+    if pd.isna(valor) or valor == "":
+        return 0.1 if es_espesor else 1.0 # Valores por defecto seguros
+    
+    val_str = str(valor).replace(',', '.')
+    
+    # Buscar todos los números (enteros o decimales)
+    numeros = re.findall(r"[-+]?\d*\.\d+|\d+", val_str)
+    
+    if numeros:
+        try:
+            # Tomamos el primer número encontrado como base
+            numero = float(numeros[0])
+            
+            # Lógica específica para espesores (mm -> m)
+            if es_espesor:
+                # Si el CSV dice "Variable", retornamos un default reconocible
+                if "variable" in val_str.lower():
+                    return 0.1
+                return numero / 1000.0
+            
+            # Lógica para conductividad (Rangos)
+            # Si hay un rango "0.03 - 0.04", tomamos el mayor (más conservador para cálculo de U)
+            if len(numeros) > 1 and '-' in val_str:
+                return max([float(n) for n in numeros])
+            
+            return numero
+        except ValueError:
+            pass
+            
+    return 0.1 if es_espesor else 1.0
+
 @st.cache_data
 def cargar_base_datos():
-    """
-    Intenta cargar la base de datos desde 3 fuentes en orden de prioridad:
-    1. Archivo local (para desarrollo o si se sube junto al script).
-    2. GitHub Raw (para despliegue en nube sin el archivo).
-    3. Retorna None si falla para pedir carga manual.
-    """
     df = None
     
     # 1. Intentar carga LOCAL
     try:
         df = pd.read_csv(NOMBRE_ARCHIVO_LOCAL)
     except FileNotFoundError:
-        pass # No está local, intentamos remoto
+        pass 
 
-    # 2. Intentar carga REMOTA (GitHub)
+    # 2. Intentar carga REMOTA
     if df is None:
         try:
-            # Usamos storage_options para evitar errores de certificado en algunos entornos, 
-            # aunque pd.read_csv suele manejarlo bien directamente.
             df = pd.read_csv(URL_GITHUB_RAW)
-        except Exception as e:
-            # Si falla la conexión o la URL está mal
+        except Exception:
             pass 
 
-    # 3. Procesar DataFrame si se cargó exitosamente
+    # 3. Procesar DataFrame
     if df is not None and not df.empty:
         try:
-            # Normalizar columnas por si acaso
             df.columns = [c.strip() for c in df.columns]
             
-            # Función para categorizar el uso si no viene explícito o para filtrar mejor
+            # Normalizar columnas clave
+            col_cond = next((c for c in df.columns if 'Conductividad' in c), None)
+            col_esp = next((c for c in df.columns if 'Espesor' in c), None)
+            
+            if col_cond and col_esp:
+                # Pre-calcular valores limpios para usar en la UI
+                df['Valor_K'] = df[col_cond].apply(lambda x: procesar_dato_numerico(x, es_espesor=False))
+                df['Valor_E'] = df[col_esp].apply(lambda x: procesar_dato_numerico(x, es_espesor=True))
+            
+            # Clasificación de uso
             def clasificar_uso(texto_uso):
                 texto = str(texto_uso).lower()
                 if any(x in texto for x in ['muro', 'tabique', 'fachada', 'siding', 'ladrillo', 'bloque', 'hormigón', 'metalcon']):
@@ -64,16 +101,15 @@ def cargar_base_datos():
                 
             return df
         except Exception as e:
-            st.error(f"Error procesando la estructura del CSV: {e}")
+            st.error(f"Error procesando CSV: {e}")
             return None
             
     return None
 
-# Ejecutar carga
 df_materiales = cargar_base_datos()
 
 # -----------------------------------------------------------------------------
-# 2. CONSTANTES NORMATIVAS (OGUC / DITEC)
+# 2. CONSTANTES NORMATIVAS
 # -----------------------------------------------------------------------------
 LIMITES_U = {
     'A': {'Techo': 0.84, 'Muro': 2.10, 'PisoVent': 3.60},
@@ -87,7 +123,6 @@ LIMITES_U = {
     'I': {'Techo': 0.25, 'Muro': 0.30, 'PisoVent': 0.30}
 }
 
-# Base de datos simplificada de zonificación (Se debería expandir)
 ZONIFICACION_DB = [
     {"Region": "Metropolitana", "Comuna": "Santiago", "Zona_Base": "D", "Altitud_Limite": 2000, "Zona_Alta": "H"},
     {"Region": "Metropolitana", "Comuna": "Puente Alto", "Zona_Base": "D", "Altitud_Limite": 2000, "Zona_Alta": "H"},
@@ -111,32 +146,17 @@ df_zonas = pd.DataFrame(ZONIFICACION_DB)
 # -----------------------------------------------------------------------------
 
 def get_max_window_percentage(zona, orientacion, u_ventana):
-    """
-    Retorna el % máximo de ventana permitido (Simplificación de tablas DITEC).
-    """
     limites_base = {'Norte': 75, 'Oriente': 50, 'Poniente': 50, 'Sur': 40}
     base = limites_base.get(orientacion, 40)
-    
-    # Ajuste simple según severidad de la zona
-    if zona in ['A', 'B', 'C']: 
-        return min(100, base + 20)
-    if zona in ['H', 'I']: 
-        return max(15, base - 20)
-    
-    # Si la ventana es muy mala (U alto), castigar porcentaje
-    if u_ventana > 3.6:
-        return max(10, base - 15)
-        
+    if zona in ['A', 'B', 'C']: return min(100, base + 20)
+    if zona in ['H', 'I']: return max(15, base - 20)
+    if u_ventana > 3.6: return max(10, base - 15)
     return base
 
 def generar_excel_ventanas(lista_ventanas, zona, proyecto_info):
-    """Genera un archivo Excel en memoria para descargar."""
     output = io.BytesIO()
-    # Usamos xlsxwriter como motor
     with pd.ExcelWriter(output, engine='xlsxwriter') as workbook:
         df = pd.DataFrame(lista_ventanas)
-        
-        # --- Hoja 1: Resumen ---
         ws_resumen = workbook.book.add_worksheet('Resumen Proyecto')
         format_bold = workbook.book.add_format({'bold': True})
         
@@ -147,16 +167,15 @@ def generar_excel_ventanas(lista_ventanas, zona, proyecto_info):
         ws_resumen.write(2, 0, "Comuna:", format_bold)
         ws_resumen.write(2, 1, proyecto_info.get('comuna', '-'))
         
-        # --- Hoja 2: Detalle ---
         if not df.empty:
             df.to_excel(workbook, sheet_name='Calculo_Ventanas', index=False)
             ws_datos = workbook.sheets['Calculo_Ventanas']
-            ws_datos.set_column('A:Z', 18) # Ajustar ancho columnas
+            ws_datos.set_column('A:Z', 18)
             
     return output.getvalue()
 
 # -----------------------------------------------------------------------------
-# 4. INTERFAZ DE USUARIO (SIDEBAR)
+# 4. INTERFAZ DE USUARIO
 # -----------------------------------------------------------------------------
 st.title("🇨🇱 Calculadora Térmica Avanzada (OGUC 4.1.10)")
 st.markdown("""
@@ -166,10 +185,10 @@ Integra base de datos de materiales y generación de reportes DITEC.
 
 with st.sidebar:
     st.header("1. Emplazamiento")
-    regiones = df_zonas['Region'].unique()
+    regiones = sorted(df_zonas['Region'].unique())
     region_sel = st.selectbox("Región", regiones)
     
-    comunas = df_zonas[df_zonas['Region'] == region_sel]['Comuna'].unique()
+    comunas = sorted(df_zonas[df_zonas['Region'] == region_sel]['Comuna'].unique())
     comuna_sel = st.selectbox("Comuna", comunas)
     
     datos_comuna = df_zonas[df_zonas['Comuna'] == comuna_sel].iloc[0]
@@ -186,27 +205,13 @@ with st.sidebar:
     st.header("2. Datos Proyecto")
     nom_proyecto = st.text_input("Nombre del Proyecto", "Mi Proyecto")
     
-    # --- FALLBACK CARGA MANUAL ---
     if df_materiales is None or df_materiales.empty:
-        st.error("⚠️ No se pudo cargar la base de datos automáticamente.")
-        st.markdown("Por favor, sube el archivo `base_datos_materiales_chile.csv`:")
-        uploaded_file = st.file_uploader("Cargar CSV Materiales", type="csv")
+        st.error("⚠️ Error base de datos.")
+        uploaded_file = st.file_uploader("Cargar CSV Manual", type="csv")
         if uploaded_file:
             df_materiales = pd.read_csv(uploaded_file)
-            # Replicar lógica de clasificación
-            def clasificar_uso_manual(t):
-                t = str(t).lower()
-                if any(x in t for x in ['muro','ladrillo']): return 'Muro'
-                if any(x in t for x in ['techo','cubierta']): return 'Techo'
-                if any(x in t for x in ['piso','radier']): return 'Piso'
-                return 'General'
-            df_materiales['Filtro_Uso'] = df_materiales['Uso_Recomendado'].apply(clasificar_uso_manual)
-            st.success("Base de datos cargada.")
             st.rerun()
 
-# -----------------------------------------------------------------------------
-# 5. PESTAÑAS PRINCIPALES
-# -----------------------------------------------------------------------------
 tab1, tab2, tab3 = st.tabs(["🧱 Envolvente Opaca", "🪟 Ventanas (Formulario)", "💧 Riesgo Condensación"])
 
 # =============================================================================
@@ -220,7 +225,6 @@ with tab1:
         
         with col_input:
             tipo_elem = st.selectbox("Elemento a calcular", ["Muro", "Techo", "Piso Ventilado"])
-            # Filtro para la DB
             mapa_uso = {'Muro': 'Muro', 'Techo': 'Techo', 'Piso Ventilado': 'Piso'}
             filtro_uso_actual = mapa_uso.get(tipo_elem, 'General')
             
@@ -230,7 +234,7 @@ with tab1:
             
             n_capas = st.number_input("N° Capas", 1, 10, len(st.session_state['capas_opaco']))
             
-            # Ajustar tamaño lista
+            # Sincronizar tamaño lista
             if len(st.session_state['capas_opaco']) < n_capas:
                 for _ in range(n_capas - len(st.session_state['capas_opaco'])):
                     st.session_state['capas_opaco'].append({})
@@ -243,40 +247,37 @@ with tab1:
                 st.markdown(f"**Capa {i+1}**")
                 c1, c2, c3, c4 = st.columns([3, 3, 2, 2])
                 
-                # Filtrar DF
+                # Filtrado inteligente
                 df_filt = df_materiales[df_materiales['Filtro_Uso'] == filtro_uso_actual]
-                # Si queda vacío (ej. no hay pisos), usar todo
                 if df_filt.empty: df_filt = df_materiales
                 
                 categorias = ['Personalizado'] + sorted(list(df_filt['Categoria_General'].unique()))
                 
                 with c1:
-                    cat_sel = st.selectbox(f"Cat {i+1}", categorias, key=f"c_cat_{i}")
+                    cat_sel = st.selectbox(f"Categoría", categorias, key=f"c_cat_{i}", label_visibility="collapsed")
                 
                 with c2:
                     if cat_sel == 'Personalizado':
-                        nom_mat = st.text_input(f"Nombre {i+1}", key=f"c_nom_{i}")
+                        nom_mat = st.text_input(f"Material", key=f"c_nom_{i}", label_visibility="collapsed", placeholder="Nombre")
                         val_cond_def = 1.0
+                        val_esp_def = 0.01
                     else:
                         mats = df_filt[df_filt['Categoria_General'] == cat_sel]
-                        dict_mats = dict(zip(mats['Producto_Comercial'], mats['Conductividad_W_mK']))
-                        nom_mat = st.selectbox(f"Mat {i+1}", list(dict_mats.keys()), key=f"c_mat_{i}")
-                        # Intentar parsear el valor de conductividad (a veces viene como rango string)
-                        try:
-                            val_str = str(dict_mats[nom_mat]).replace(',', '.')
-                            # Si hay rango "0.03 - 0.04", tomamos el mayor (más desfavorable)
-                            if '-' in val_str:
-                                val_cond_def = float(val_str.split('-')[-1])
-                            else:
-                                val_cond_def = float(val_str)
-                        except:
-                            val_cond_def = 1.0
+                        # Diccionario ahora guarda (Conductividad, Espesor)
+                        dict_mats = {row['Producto_Comercial']: (row['Valor_K'], row['Valor_E']) for _, row in mats.iterrows()}
+                        
+                        nom_mat = st.selectbox(f"Material", list(dict_mats.keys()), key=f"c_mat_{i}", label_visibility="collapsed")
+                        
+                        # Extraer valores pre-calculados
+                        datos_mat = dict_mats.get(nom_mat, (1.0, 0.01))
+                        val_cond_def = datos_mat[0]
+                        val_esp_def = datos_mat[1]
 
                 with c3:
-                    cond = st.number_input(f"λ (W/mK)", value=val_cond_def, format="%.3f", key=f"c_cond_{i}")
+                    cond = st.number_input(f"λ (W/mK)", value=val_cond_def, format="%.3f", key=f"c_cond_{i}", step=0.01)
                 
                 with c4:
-                    esp = st.number_input(f"Esp (m)", value=0.01, format="%.3f", key=f"c_esp_{i}")
+                    esp = st.number_input(f"Esp (m)", value=val_esp_def, format="%.3f", key=f"c_esp_{i}", step=0.01)
                 
                 if esp > 0 and cond > 0:
                     capas_para_calculo.append({'e': esp, 'cond': cond})
@@ -284,11 +285,11 @@ with tab1:
         with col_result:
             st.markdown("### Resultados")
             if capas_para_calculo:
-                rsi = 0.10 if tipo_elem == 'Techo' else 0.13 # NCh853
+                rsi = 0.10 if tipo_elem == 'Techo' else 0.13
                 rse = 0.04
                 r_capas = sum([c['e']/c['cond'] for c in capas_para_calculo])
                 rt = rsi + r_capas + rse
-                u_final = 1 / rt
+                u_final = 1 / rt if rt > 0 else 0
                 
                 limite = LIMITES_U[zona_termica].get(tipo_elem.replace(" ", ""), 99)
                 
@@ -297,128 +298,81 @@ with tab1:
                 st.metric(f"Límite Zona {zona_termica}", f"{limite} W/m²K")
                 
                 if u_final <= limite:
-                    st.success("✅ CUMPLE NORMATIVA")
+                    st.success("✅ CUMPLE")
                 else:
-                    st.error("❌ NO CUMPLE - Aumentar aislación")
-            else:
-                st.warning("Ingrese espesores válidos.")
+                    st.error("❌ NO CUMPLE")
+                    dif = (1/limite) - rt if limite > 0 else 0
+                    if dif > 0:
+                        st.caption(f"Falta resistencia: {dif:.2f} m²K/W")
     else:
-        st.warning("Esperando base de datos...")
+        st.info("Cargando base de datos...")
 
 # =============================================================================
-# TAB 2: VENTANAS (FORMULARIO DITEC)
+# TAB 2: VENTANAS
 # =============================================================================
 with tab2:
     st.subheader("Cálculo y Reporte de Ventanas")
-    
-    if 'ventanas' not in st.session_state:
-        st.session_state['ventanas'] = []
+    if 'ventanas' not in st.session_state: st.session_state['ventanas'] = []
         
-    # Formulario de Ingreso
     with st.expander("➕ Agregar Nueva Ventana", expanded=True):
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
-            v_id = st.text_input("ID / Código", f"V-{len(st.session_state['ventanas'])+1}")
+            v_id = st.text_input("ID", f"V-{len(st.session_state['ventanas'])+1}")
             v_ori = st.selectbox("Orientación", ["Norte", "Sur", "Oriente", "Poniente"])
         with col_v2:
             v_w = st.number_input("Ancho (m)", 0.1, 10.0, 1.2)
             v_h = st.number_input("Alto (m)", 0.1, 10.0, 1.2)
             v_area = v_w * v_h
-            st.caption(f"Área Ventana: {v_area:.2f} m²")
         with col_v3:
-            v_u_win = st.number_input("U Ventana ($U_w$)", 0.1, 7.0, 2.8, help="Valor combinado vidrio+marco")
-            v_muro_total = st.number_input("Superficie Total Fachada (m²)", v_area, 200.0, v_area*3)
+            v_u_win = st.number_input("U Ventana ($U_w$)", 0.1, 7.0, 2.8)
+            v_muro_total = st.number_input("Sup. Fachada Total (m²)", v_area, 500.0, max(v_area*3, 10.0))
             v_u_muro = st.number_input("U Muro Opaco", 0.1, 5.0, 0.6)
             
         if st.button("Agregar a la Lista"):
             porc_real = (v_area / v_muro_total) * 100
             porc_max = get_max_window_percentage(zona_termica, v_ori, v_u_win)
-            
-            # Cálculo Ponderado Referencial para esa fachada
             area_opaca = v_muro_total - v_area
             u_pond = ((v_u_win * v_area) + (v_u_muro * area_opaca)) / v_muro_total
-            
-            estado = "CUMPLE (% Base)" if porc_real <= porc_max else "VERIFICAR PONDERADO"
+            estado = "CUMPLE" if porc_real <= porc_max else "VERIFICAR PONDERADO"
             
             st.session_state['ventanas'].append({
-                "ID": v_id,
-                "Orientacion": v_ori,
-                "Dimensiones": f"{v_w}x{v_h}",
-                "Area_Ventana": v_area,
-                "Area_Fachada": v_muro_total,
-                "%_Real": round(porc_real, 1),
-                "%_Max_Tabla": porc_max,
-                "U_Ventana": v_u_win,
-                "U_Muro": v_u_muro,
-                "U_Ponderado_Fachada": round(u_pond, 2),
-                "Estado": estado
+                "ID": v_id, "Orientacion": v_ori, "Dimensiones": f"{v_w}x{v_h}",
+                "Area_Ventana": v_area, "Area_Fachada": v_muro_total,
+                "%_Real": round(porc_real, 1), "%_Max": porc_max,
+                "U_Win": v_u_win, "U_Muro": v_u_muro, "U_Pond": round(u_pond, 2), "Estado": estado
             })
-            st.success(f"Ventana {v_id} agregada.")
+            st.success("Agregada")
             
-    # Tabla Resultados
-    st.divider()
     if st.session_state['ventanas']:
         df_v = pd.DataFrame(st.session_state['ventanas'])
         st.dataframe(df_v, use_container_width=True)
-        
-        c_btn1, c_btn2 = st.columns(2)
-        with c_btn1:
-            excel_file = generar_excel_ventanas(st.session_state['ventanas'], zona_termica, {'nombre': nom_proyecto, 'comuna': comuna_sel})
-            st.download_button(
-                "💾 Descargar Reporte Excel",
-                data=excel_file,
-                file_name=f"Reporte_Ventanas_{nom_proyecto}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with c_btn2:
-            if st.button("🗑️ Borrar Lista"):
-                st.session_state['ventanas'] = []
-                st.rerun()
-    else:
-        st.info("No hay ventanas registradas.")
+        excel_file = generar_excel_ventanas(st.session_state['ventanas'], zona_termica, {'nombre': nom_proyecto, 'comuna': comuna_sel})
+        st.download_button("💾 Descargar Excel", excel_file, f"Ventanas_{nom_proyecto}.xlsx")
+        if st.button("Borrar Lista"):
+            st.session_state['ventanas'] = []
+            st.rerun()
 
 # =============================================================================
 # TAB 3: CONDENSACIÓN
 # =============================================================================
 with tab3:
-    st.subheader("Análisis de Riesgo de Condensación Superficial")
-    st.markdown("Basado en criterio de Temperatura de Rocío (NCh1973)")
-    
-    col_cond1, col_cond2 = st.columns(2)
-    
-    with col_cond1:
-        st.markdown("**Condiciones Interiores**")
-        t_int = st.number_input("Temp. Interior (°C)", value=20.0, disabled=True, help="Estándar habitacional")
-        hr_int = st.slider("Humedad Relativa Interior (%)", 30, 90, 75, help="75% es el valor crítico normativo")
+    st.subheader("Análisis Condensación Superficial")
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        t_int = 20.0
+        hr_int = st.slider("HR Interior (%)", 40, 90, 75)
+        t_ext = st.number_input("T° Exterior Diseño", -20.0, 20.0, 5.0)
+        u_elem = st.number_input("U Elemento (W/m²K)", 0.1, 5.0, 1.8)
+    with col_c2:
+        rsi = 0.13
+        t_si = t_int - (u_elem * rsi * (t_int - t_ext))
+        b, c = 17.62, 243.12
+        gamma = (b * t_int / (c + t_int)) + math.log(hr_int / 100.0)
+        t_rocio = (c * gamma) / (b - gamma)
         
-        st.markdown("**Condiciones Exteriores**")
-        t_ext = st.number_input("Temp. Exterior Diseño (°C)", -20.0, 20.0, 5.0, help="Temperatura media mínima del lugar")
-        
-        u_elemento = st.number_input("U del Elemento a Evaluar (W/m²K)", 0.1, 5.0, 1.8)
-    
-    with col_cond2:
-        # Cálculo
-        # 1. T Superficial Interior
-        # Tsi = Ti - U * Rsi * (Ti - Te)
-        rsi_cond = 0.13 # Muro
-        t_si = t_int - (u_elemento * rsi_cond * (t_int - t_ext))
-        
-        # 2. Punto de Rocío (Magnus)
-        # Tdp = (c * gamma) / (b - gamma)
-        b_const = 17.62
-        c_const = 243.12
-        gamma = (b_const * t_int / (c_const + t_int)) + math.log(hr_int / 100.0)
-        t_rocio = (c_const * gamma) / (b_const - gamma)
-        
-        st.metric("Temp. Superficial Interior (Tsi)", f"{t_si:.2f} °C")
-        st.metric("Punto de Rocío (Tdp)", f"{t_rocio:.2f} °C")
-        
-        diff = t_si - t_rocio
-        
-        if diff > 0:
-            st.success(f"✅ **NO CONDENSA** (Margen: {diff:.2f}°C)")
-            st.caption("La superficie está más caliente que el punto de rocío.")
+        st.metric("T° Superficial", f"{t_si:.1f}°C")
+        st.metric("T° Rocío", f"{t_rocio:.1f}°C")
+        if t_si > t_rocio:
+            st.success("✅ NO CONDENSA")
         else:
-            st.error(f"⚠️ **RIESGO DE CONDENSACIÓN**")
-            st.caption("El vapor de agua condensará en la superficie fría del muro/vidrio.")
-            st.markdown("💡 **Solución:** Mejore la aislación (baje el U) o ventile para bajar la humedad.")
+            st.error("⚠️ RIESGO CONDENSACIÓN")
