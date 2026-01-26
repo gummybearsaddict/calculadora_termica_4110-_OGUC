@@ -1,0 +1,38 @@
+Categoria_General,Sub_Categoria,Producto_Comercial,Fabricante_o_Distribuidor,Uso_Recomendado,Espesor_mm,Conductividad_W_mK,Origen_del_Dato
+Obra Gruesa y Estructura,Albañilería,Ladrillo Thermo Murotón,Cerámica Santiago,Muros perimetrales térmicos,140,N/A (U=1.84 W/m2K),Ficha Técnica
+Obra Gruesa y Estructura,Albañilería,Ladrillo Santiagote 9,Cerámica Santiago,Albañilería armada estructural,140,N/A (U=1.90 W/m2K),Ficha Técnica
+Obra Gruesa y Estructura,Albañilería,Ladrillo Fiscal Tradicional,Genérico,Muros generales,Variable,0.60,Norma NCh853
+Obra Gruesa y Estructura,Hormigón,Hormigón Armado (H25/H30),Melón / Genérico,Estructura soportante,Variable,1.63,Norma NCh853
+Obra Gruesa y Estructura,Hormigón,Bloque Hormigón Celular,Hebel (Xella),Muros térmicos y cortafuego,100; 125; 150; 175,0.12 - 0.14,Ficha Técnica
+Obra Gruesa y Estructura,Acero,Metalcon Estructural (Perfil C),Cintac,Muros portantes y envigados,0.85; 1.0; 1.6,58.0,Norma NCh853
+Obra Gruesa y Estructura,Acero,Metalcon Tabique (Perfil C/U),Cintac,Tabiques divisorios interiores,0.5,58.0,Norma NCh853
+Obra Gruesa y Estructura,Madera,Pino Radiata (Seco 12%),Genérico / Retail,Estructura techumbre y muros,41 (2 pulgadas),0.104,Norma NCh853
+Aislantes Térmicos y Barreras,EPS,Aislapol Baja Densidad (10 kg/m3),Aislapol,Juntas dilatación (No habitacional),Variable,0.043 - 0.045,Norma NCh853
+Aislantes Térmicos y Barreras,EPS,Aislapol Media Densidad (15 kg/m3),Aislapol,Relleno tabiques / Paneles SIP,Variable,0.041,Ficha Técnica
+Aislantes Térmicos y Barreras,EPS,Aislapol Alta Densidad (20 kg/m3),Aislapol,EIFS y Aislación bajo radier,Variable,0.038,Ficha Técnica
+Aislantes Térmicos y Barreras,XPS,Poliestireno Extruido (XPS),Danosa / Styrofoam,Aislación bajo radier / Cubierta invertida,40; 50; 60,0.034,Ficha Técnica
+Aislantes Térmicos y Barreras,Lana Vidrio,AislanGlass R122,Volcán,Tabiques delgados (Metalcon 60mm),50,0.042,Ficha Técnica
+Aislantes Térmicos y Barreras,Lana Vidrio,AislanGlass R188,Volcán,Muros perimetrales (Metalcon 90mm),80,0.042,Ficha Técnica
+Aislantes Térmicos y Barreras,Lana Vidrio,AislanGlass R235,Volcán,Techumbres y Cielos,100; 120,0.042,Ficha Técnica
+Aislantes Térmicos y Barreras,Lana Vidrio,AislanGlass R329,Volcán,Techumbres Alta Exigencia (Sur),140; 160,0.042,Ficha Técnica
+Aislantes Térmicos y Barreras,Lana Mineral,Lana Mineral Losa/Rollo,Volcán / Aislan,Cortafuego y aislación acústica,40; 60; 80; 100,0.042,Ficha Técnica
+Aislantes Térmicos y Barreras,Celulosa,Celulosa Proyectada,Aislacel / GreenTop,Entretechos y tabiques (Relleno),Variable,0.040,Ficha Técnica
+Revestimientos y Placas,Yeso-Cartón,Volcanita ST (Standard),Volcán / Knauf / Gyplac,Zonas secas y Cielos,8; 10; 12.5; 15,0.24,Norma NCh853
+Revestimientos y Placas,Yeso-Cartón,Volcanita RH (Hidro),Volcán / Knauf / Gyplac,Zonas húmedas (Baños/Cocinas),12.5; 15,0.28,Norma NCh853
+Revestimientos y Placas,Yeso-Cartón,Volcanita RF (Fuego),Volcán / Knauf / Gyplac,Protección pasiva cortafuego,12.5; 15,0.28,Norma NCh853
+Revestimientos y Placas,Yeso-Cartón,Volcanita Habito / Impacto,Volcán,Zonas de alto tránsito y carga,12.5,0.25,Ficha Técnica
+Revestimientos y Placas,Fibrocemento,Permanit / Superboard,Pizarreño / Etex,Zonas húmedas y exterior,4; 5; 6; 8; 10,0.23,Norma NCh853
+Revestimientos y Placas,Siding,Siding Cedral (Veta Madera),Pizarreño,Fachada ventilada estética,6; 8,0.23,Norma NCh853
+Revestimientos y Placas,Tablero Madera,OSB APA Estructural,LP Chile,Arriostramiento muro/techo,9.5; 11.1; 15.1,0.10 - 0.13,Ficha Técnica LP
+Revestimientos y Placas,Tablero Madera,Terciado Estructural / Fenólico,Arauco / CMPC,Muros; Pisos; Moldajes,9; 12; 15; 18,0.15,Norma NCh853
+Cubiertas y Terminaciones,Cubierta Aislada,Panel PV4 (Núcleo EPS),Cintac / Instapanel,Cubierta habitacional/industrial,50 a 150 (Núcleo),0.043 (Aislante),Ficha Técnica
+Cubiertas y Terminaciones,Cubierta Aislada,Panel PV4 (Núcleo PUR),Cintac / Instapanel,Cubierta alta eficiencia,30 a 100 (Núcleo),0.022 (Aislante),Ficha Técnica
+Cubiertas y Terminaciones,Hojalatería,Zinc Alum 5V (Retail),Genérico / Sodimac,Techumbre económica (Baja carga),0.35 (Acero),50.0 (Conductor),Ficha Técnica
+Cubiertas y Terminaciones,Hojalatería,Zinc Alum 5V (Industrial),Cintac / Prodalam,Techumbre industrial / Zona Nieve,0.40; 0.50; 0.60,50.0 (Conductor),Ficha Técnica
+Cubiertas y Terminaciones,Tejas,Teja Asfáltica,Owens Corning / Easy,Cubierta decorativa (sobre placa OSB),Variable,0.17 (Asfalto),Ficha Técnica
+Cubiertas y Terminaciones,Membrana,Tyvek HomeWrap,DuPont,Barrera viento/agua muros (Respirable),0.175,N/A,Ficha Técnica
+Cubiertas y Terminaciones,Membrana,Fieltro Asfáltico 15 lbs,Genérico,Barrera humedad bajo revestimiento,0.3 - 0.6,N/A,Genérico
+Cubiertas y Terminaciones,Pisos,Piso Flotante Fotolaminado,Holztek / Klipen,Dormitorios y Salas de estar,8; 10; 12,0.12,Ficha Técnica
+Cubiertas y Terminaciones,Pisos,Piso Vinílico SPC,MK / Atika / Klipen,Baños; Cocinas (Impermeable),4; 5; 6,0.15 - 0.25,Ficha Técnica
+Cubiertas y Terminaciones,Pisos,Porcelanato / Cerámica,MK / Atika / Duomo,Baños; Cocinas; Losa Radiante,8 - 10,1.30,Norma NCh853
+Cubiertas y Terminaciones,Cielos,Cielo Modular Fibra Mineral,Armstrong,Oficinas y Comercio,15 (5/8"),0.057,Ficha Técnica
